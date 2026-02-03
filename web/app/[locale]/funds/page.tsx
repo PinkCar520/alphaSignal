@@ -252,65 +252,10 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 {/* Left: Watchlist */}
-                <div className="lg:col-span-3">
+                <div className="lg:col-span-4">
                     <Card title={t('watchlist')} className="overflow-visible">
-                        <div className="flex flex-col gap-2">
-                            {watchlist
-                                .slice() // Create a copy to avoid mutating state
-                                .sort((a, b) => {
-                                    // Sort by estimated_growth (descending)
-                                    // Funds without growth data go to the end
-                                    if (a.estimated_growth === undefined && b.estimated_growth === undefined) return 0;
-                                    if (a.estimated_growth === undefined) return 1;
-                                    if (b.estimated_growth === undefined) return -1;
-                                    return b.estimated_growth - a.estimated_growth;
-                                })
-                                .map(item => (
-                                    <div
-                                        key={item.code}
-                                        onClick={() => setSelectedFund(item.code)}
-                                        className={`group flex items-center justify-between p-3 rounded-md transition-all cursor-pointer ${selectedFund === item.code
-                                            ? 'bg-purple-500/20 border border-purple-500/50 text-purple-200'
-                                            : 'bg-slate-900/50 border border-slate-800 hover:bg-slate-800 text-slate-400'
-                                            }`}
-                                    >
-                                        <div className="flex flex-col overflow-hidden flex-1">
-                                            <div className="flex items-center justify-between gap-2">
-                                                <span className="font-bold text-sm truncate">{item.name || item.code}</span>
-                                                {item.estimated_growth !== undefined && (
-                                                    <div className="flex items-center gap-1 shrink-0">
-                                                        <span className={`font-mono text-xs font-bold ${item.estimated_growth >= 0 ? 'text-rose-400' : 'text-emerald-400'
-                                                            }`}>
-                                                            {item.estimated_growth > 0 ? '+' : ''}{item.estimated_growth.toFixed(2)}%
-                                                        </span>
-                                                        {/* Trend Arrow */}
-                                                        {item.previous_growth !== undefined && item.estimated_growth !== item.previous_growth && (
-                                                            item.estimated_growth > item.previous_growth ? (
-                                                                <ArrowUp className="w-3 h-3 text-rose-400" />
-                                                            ) : (
-                                                                <ArrowDown className="w-3 h-3 text-emerald-400" />
-                                                            )
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <span className="font-mono text-[10px] opacity-60">{item.code}</span>
-                                        </div>
-
-                                        <div className="flex items-center gap-2 shrink-0 ml-2">
-                                            {selectedFund === item.code && loading && <RefreshCw className="w-3 h-3 animate-spin" />}
-                                            <button
-                                                onClick={(e) => handleDelete(e, item.code)}
-                                                className="p-1 hover:bg-white/10 rounded-full text-slate-500 hover:text-rose-400 transition-colors"
-                                            >
-                                                <X className="w-3 h-3" />
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-
-
-                            <div className="mt-2">
+                        <div className="flex flex-col h-[calc(100vh-12rem)]">
+                            <div className="mb-4 shrink-0 relative z-20">
                                 <FundSearch
                                     onAddFund={(code, name) => {
                                         if (!watchlist.some(i => i.code === code)) {
@@ -322,12 +267,68 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
                                     placeholder={t('addPlaceholder')}
                                 />
                             </div>
+
+                            <div className="flex-1 overflow-y-auto min-h-0 space-y-2 pr-1 custom-scrollbar">
+                                {watchlist
+                                    .slice() // Create a copy to avoid mutating state
+                                    .sort((a, b) => {
+                                        // Sort by estimated_growth (descending)
+                                        // Funds without growth data go to the end
+                                        if (a.estimated_growth === undefined && b.estimated_growth === undefined) return 0;
+                                        if (a.estimated_growth === undefined) return 1;
+                                        if (b.estimated_growth === undefined) return -1;
+                                        return b.estimated_growth - a.estimated_growth;
+                                    })
+                                    .map(item => (
+                                        <div
+                                            key={item.code}
+                                            onClick={() => setSelectedFund(item.code)}
+                                            className={`group flex items-center justify-between p-3 rounded-md transition-all cursor-pointer ${selectedFund === item.code
+                                                ? 'bg-purple-500/20 border border-purple-500/50 text-purple-200'
+                                                : 'bg-slate-900/50 border border-slate-800 hover:bg-slate-800 text-slate-400'
+                                                }`}
+                                        >
+                                            <div className="flex flex-col overflow-hidden flex-1">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <span className="font-bold text-sm truncate">{item.name || item.code}</span>
+                                                    {item.estimated_growth !== undefined && (
+                                                        <div className="flex items-center gap-1 shrink-0">
+                                                            <span className={`font-mono text-xs font-bold ${item.estimated_growth >= 0 ? 'text-rose-400' : 'text-emerald-400'
+                                                                }`}>
+                                                                {item.estimated_growth > 0 ? '+' : ''}{item.estimated_growth.toFixed(2)}%
+                                                            </span>
+                                                            {/* Trend Arrow */}
+                                                            {item.previous_growth !== undefined && item.estimated_growth !== item.previous_growth && (
+                                                                item.estimated_growth > item.previous_growth ? (
+                                                                    <ArrowUp className="w-3 h-3 text-rose-400" />
+                                                                ) : (
+                                                                    <ArrowDown className="w-3 h-3 text-emerald-400" />
+                                                                )
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <span className="font-mono text-[10px] opacity-60">{item.code}</span>
+                                            </div>
+
+                                            <div className="flex items-center gap-2 shrink-0 ml-2">
+                                                {selectedFund === item.code && loading && <RefreshCw className="w-3 h-3 animate-spin" />}
+                                                <button
+                                                    onClick={(e) => handleDelete(e, item.code)}
+                                                    className="p-1 hover:bg-white/10 rounded-full text-slate-500 hover:text-rose-400 transition-colors"
+                                                >
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                            </div>
                         </div>
                     </Card>
                 </div>
 
                 {/* Right: Details */}
-                <div className="lg:col-span-9">
+                <div className="lg:col-span-8">
                     {valuation ? (
                         <div className="flex flex-col gap-6">
                             {/* Main KPI Card */}
@@ -390,15 +391,15 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
 
                             {/* Attribution Table */}
                             <Card title={t('attribution')}>
-                                <div className="overflow-x-auto">
+                                <div className="overflow-x-auto overflow-y-auto max-h-[500px] custom-scrollbar">
                                     <table className="w-full text-left border-collapse text-sm">
-                                        <thead>
-                                            <tr className="border-b border-slate-800 text-slate-500 text-[10px] uppercase tracking-wider">
-                                                <th className="p-3">{t('tableStock')}</th>
-                                                <th className="p-3 text-right">{t('tablePrice')}</th>
-                                                <th className="p-3 text-right">{t('tableChange')}</th>
-                                                <th className="p-3 text-right">{t('tableWeight')}</th>
-                                                <th className="p-3 text-right">{t('tableImpact')}</th>
+                                        <thead className="sticky top-0 bg-slate-900 z-10">
+                                            <tr className="border-b border-slate-800 text-slate-500 text-[10px] uppercase tracking-wider shadow-sm">
+                                                <th className="p-3 bg-slate-900">{t('tableStock')}</th>
+                                                <th className="p-3 text-right bg-slate-900">{t('tablePrice')}</th>
+                                                <th className="p-3 text-right bg-slate-900">{t('tableChange')}</th>
+                                                <th className="p-3 text-right bg-slate-900">{t('tableWeight')}</th>
+                                                <th className="p-3 text-right bg-slate-900">{t('tableImpact')}</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-800/50">
