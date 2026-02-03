@@ -144,6 +144,35 @@ async def refresh_fund_holdings(code: str):
     holdings = engine.update_fund_holdings(code)
     return {"status": "ok", "holdings_count": len(holdings)}
 
+@app.get("/api/funds/search")
+async def search_funds(q: str = "", limit: int = 20):
+    """
+    Search for funds by code or name.
+    
+    Args:
+        q: Search query (fund code or name)
+        limit: Maximum number of results (default 20, max 50)
+    
+    Returns:
+        List of matching funds with code, name, type, and company
+    """
+    from src.alphasignal.core.fund_engine import FundEngine
+    
+    if not q or len(q.strip()) == 0:
+        return {"results": [], "total": 0}
+    
+    # Limit max results to 50
+    limit = min(limit, 50)
+    
+    engine = FundEngine()
+    results = engine.search_funds(q.strip(), limit)
+    
+    return {
+        "results": results,
+        "total": len(results),
+        "query": q
+    }
+
 @app.get("/api/stats")
 async def get_backtest_stats(request: Request):
     """
