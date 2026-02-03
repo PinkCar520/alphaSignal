@@ -127,6 +127,22 @@ app = FastAPI(lifespan=lifespan)
 # --- Endpoints ---
 
 
+@app.get("/api/funds/{code}/valuation")
+async def get_fund_valuation(code: str):
+    """Get real-time estimated valuation for a fund."""
+    from src.alphasignal.core.fund_engine import FundEngine
+    
+    engine = FundEngine()
+    result = engine.calculate_realtime_valuation(code)
+    return result
+
+@app.post("/api/funds/{code}/refresh")
+async def refresh_fund_holdings(code: str):
+    """Force refresh of fund holdings (e.g. new quarter released)."""
+    from src.alphasignal.core.fund_engine import FundEngine
+    engine = FundEngine()
+    holdings = engine.update_fund_holdings(code)
+    return {"status": "ok", "holdings_count": len(holdings)}
 
 @app.get("/api/stats")
 async def get_backtest_stats(request: Request):

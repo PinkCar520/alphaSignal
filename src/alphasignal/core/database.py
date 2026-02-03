@@ -101,7 +101,29 @@ class IntelligenceDB:
             cursor.execute("ALTER TABLE intelligence ADD COLUMN IF NOT EXISTS macro_adjustment DOUBLE PRECISION DEFAULT 0.0;")
             cursor.execute("ALTER TABLE intelligence ADD COLUMN IF NOT EXISTS sentiment_score DOUBLE PRECISION;")
             
-            # Create Indexes
+            # Fund Valuation Tables
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS fund_holdings (
+                    fund_code TEXT,
+                    stock_code TEXT,
+                    stock_name TEXT,
+                    weight DOUBLE PRECISION,
+                    report_date TEXT,
+                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (fund_code, stock_code)
+                );
+            """)
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS fund_valuation (
+                    fund_code TEXT,
+                    timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                    estimated_growth DOUBLE PRECISION,
+                    details JSONB,
+                    PRIMARY KEY (fund_code, timestamp)
+                );
+            """)
+
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_intelligence_timestamp ON intelligence(timestamp DESC);
                 CREATE INDEX IF NOT EXISTS idx_intelligence_source_id ON intelligence(source_id);
@@ -655,3 +677,67 @@ class IntelligenceDB:
             logger.error(f"Duplicate Check Failed: {e}")
             # In case of error, assume it's not a duplicate to avoid blocking new intelligence
             return False
+            
+    # --- Fund Valuation Methods ---
+
+    def save_fund_holdings(self, fund_code, holdings):
+        """Save fund holdings to DB."""
+        try:
+            conn = self._get_conn()
+            cursor = conn.cursor()
+            
+            # First clean old holdings for this fund
+            cursor.execute("DELETE FROM fund_holdings WHERE fund_code = %s", (fund_code,))
+            
+            for h in holdings:
+                cursor.execute("""
+                    INSERT INTO fund_holdings (fund_code, stock_code, stock_name, weight, report_date)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (fund_code, h['code'], h['name'], h.get('weight', 0), h.get('report_date', '')))
+                
+            conn.commit()
+            conn.close()
+            logger.info(f"💾 Saved {len(holdings)} holdings for {fund_code}")
+        except Exception as e:
+            logger.error(f"Save Fund Holdings Failed: {e}")
+
+    def get_fund_holdings(self, fund_code):
+        try:
+            conn = self._get_conn()
+            cursor = conn.cursor(cursor_factory=DictCursor)
+            cursor.execute("SELECT * FROM fund_holdings WHERE fund_code = %s", (fund_code,))
+            rows = cursor.fetchall()
+            conn.close()
+            return [dict(row) for row in rows]
+        except Exception as e:
+            logger.error(f"Get Fund Holdings Failed: {e}")
+            return []
+
+    def save_fund_valuation(self, fund_code, growth, details):
+        try:
+            conn = self._get_conn()
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO fund_valuation (fund_code, estimated_growth, details)
+                VALUES (%s, %s, %s)
+            """, (fund_code, growth, Json(details)))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error(f"Save Fund Valuation Failed: {e}")
+
+    def get_latest_valuation(self, fund_code):
+        try:
+            conn = self._get_conn()
+            cursor = conn.cursor(cursor_factory=DictCursor)
+            cursor.execute("""
+                SELECT * FROM fund_valuation 
+                WHERE fund_code = %s 
+                ORDER BY timestamp DESC LIMIT 1
+            """, (fund_code,))
+            row = cursor.fetchone()
+            conn.close()
+            return dict(row) if row else None
+        except Exception as e:
+            logger.error(f"Get Latest Valuation Failed: {e}")
+            return None
