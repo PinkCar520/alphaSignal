@@ -422,29 +422,29 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
                         className="h-full flex flex-col overflow-hidden"
                         contentClassName="flex-1 min-h-0 flex flex-col p-3"
                         action={
-                            <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                            <div className="liquid-glass-toolbar">
                                 <button
                                     onClick={handleWatchlistRefresh}
-                                    className={`p-1 rounded-md transition-all ${isWatchlistRefreshing ? 'text-blue-600 bg-blue-50' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200'}`}
+                                    className={`liquid-glass-btn ${isWatchlistRefreshing ? 'active' : ''}`}
                                     title={t('refreshWatchlist')}
                                     disabled={isWatchlistRefreshing}
                                 >
-                                    <RefreshCw className={`w-3.5 h-3.5 ${isWatchlistRefreshing ? 'animate-spin' : ''}`} />
+                                    <RefreshCw className={`w-4 h-4 ${isWatchlistRefreshing ? 'animate-spin' : ''}`} />
                                 </button>
-                                <div className="w-px h-3 bg-slate-200 mx-0.5"></div>
+                                <div className="w-px h-4 bg-slate-400/20 mx-1"></div>
                                 <button
                                     onClick={() => setSortOrder(sortOrder === 'asc' ? 'none' : 'asc')}
-                                    className={`p-1 rounded-md transition-all ${sortOrder === 'asc' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200'}`}
+                                    className={`liquid-glass-btn ${sortOrder === 'asc' ? 'active' : ''}`}
                                     title={t('sortAsc')}
                                 >
-                                    <ArrowUp className="w-3.5 h-3.5" />
+                                    <ArrowUp className="w-4 h-4" />
                                 </button>
                                 <button
                                     onClick={() => setSortOrder(sortOrder === 'desc' ? 'none' : 'desc')}
-                                    className={`p-1 rounded-md transition-all ${sortOrder === 'desc' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200'}`}
+                                    className={`liquid-glass-btn ${sortOrder === 'desc' ? 'active' : ''}`}
                                     title={t('sortDesc')}
                                 >
-                                    <ArrowDown className="w-3.5 h-3.5" />
+                                    <ArrowDown className="w-4 h-4" />
                                 </button>
                             </div>
                         }
