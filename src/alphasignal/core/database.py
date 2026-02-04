@@ -104,6 +104,85 @@ class IntelligenceDB:
             cursor.execute("ALTER TABLE intelligence ADD COLUMN IF NOT EXISTS macro_adjustment DOUBLE PRECISION DEFAULT 0.0;")
             cursor.execute("ALTER TABLE intelligence ADD COLUMN IF NOT EXISTS sentiment_score DOUBLE PRECISION;")
             
+            # Fund Companies Table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS fund_companies (
+                    company_id SERIAL PRIMARY KEY,
+                    name VARCHAR(100) NOT NULL,
+                    full_name VARCHAR(255),
+                    legal_representative VARCHAR(50),
+                    establishment_date DATE,
+                    location VARCHAR(255),
+                    website VARCHAR(255),
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX IF NOT EXISTS idx_company_name ON fund_companies(name);
+            """)
+
+            # Fund Metadata Main Table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS fund_metadata (
+                    fund_code TEXT PRIMARY KEY,
+                    fund_name VARCHAR(255) NOT NULL,
+                    full_name VARCHAR(512),
+                    pinyin_shorthand VARCHAR(100),
+                    investment_type VARCHAR(50),
+                    style_tag VARCHAR(50),
+                    risk_level CHAR(2),
+                    company_id INTEGER REFERENCES fund_companies(company_id),
+                    inception_date DATE,
+                    listing_status VARCHAR(20) DEFAULT 'L',
+                    currency CHAR(3) DEFAULT 'CNY',
+                    benchmark_text TEXT,
+                    last_full_sync TIMESTAMPTZ,
+                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX IF NOT EXISTS idx_fund_code_prefix ON fund_metadata (fund_code text_pattern_ops);
+                CREATE INDEX IF NOT EXISTS idx_fund_name_trgm ON fund_metadata USING gin (fund_name gin_trgm_ops);
+                CREATE INDEX IF NOT EXISTS idx_fund_pinyin ON fund_metadata (pinyin_shorthand);
+            """)
+
+            # Fund Managers
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS fund_managers (
+                    manager_id SERIAL PRIMARY KEY,
+                    name VARCHAR(50) NOT NULL,
+                    working_years INTEGER,
+                    bio TEXT,
+                    education VARCHAR(100),
+                    is_active BOOLEAN DEFAULT TRUE
+                );
+                CREATE TABLE IF NOT EXISTS fund_manager_map (
+                    fund_code TEXT REFERENCES fund_metadata(fund_code),
+                    manager_id INTEGER REFERENCES fund_managers(manager_id),
+                    start_date DATE,
+                    end_date DATE,
+                    position VARCHAR(20),
+                    PRIMARY KEY (fund_code, manager_id, start_date)
+                );
+            """)
+
+            # Fund Stats Snapshot
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS fund_stats_snapshot (
+                    fund_code TEXT PRIMARY KEY REFERENCES fund_metadata(fund_code),
+                    total_asset DOUBLE PRECISION,
+                    net_asset DOUBLE PRECISION,
+                    mgmt_fee_rate DOUBLE PRECISION,
+                    custodian_fee_rate DOUBLE PRECISION,
+                    sales_fee_rate DOUBLE PRECISION,
+                    return_1w DOUBLE PRECISION,
+                    return_1m DOUBLE PRECISION,
+                    return_1y DOUBLE PRECISION,
+                    return_since_inception DOUBLE PRECISION,
+                    sharpe_ratio DOUBLE PRECISION,
+                    max_drawdown DOUBLE PRECISION,
+                    volatility DOUBLE PRECISION,
+                    last_updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+
             # Fund Valuation Tables
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS fund_holdings (
@@ -810,3 +889,46 @@ class IntelligenceDB:
         except Exception as e:
             logger.error(f"Get Latest Valuation Failed: {e}")
             return None
+
+    def search_funds_metadata(self, query, limit=20):
+        """Search funds in local metadata table."""
+        try:
+            conn = self._get_conn()
+            cursor = conn.cursor(cursor_factory=DictCursor)
+            
+            # Using UNION to prioritize exact or prefix matches on code
+            # and then name/pinyin matches.
+            cursor.execute("""
+                (
+                    SELECT m.fund_code as code, m.fund_name as name, m.investment_type as type, c.name as company, 1 as priority
+                    FROM fund_metadata m
+                    LEFT JOIN fund_companies c ON m.company_id = c.company_id
+                    WHERE m.fund_code LIKE %s
+                )
+                UNION ALL
+                (
+                    SELECT m.fund_code as code, m.fund_name as name, m.investment_type as type, c.name as company, 2 as priority
+                    FROM fund_metadata m
+                    LEFT JOIN fund_companies c ON m.company_id = c.company_id
+                    WHERE m.pinyin_shorthand LIKE %s
+                    AND m.fund_code NOT LIKE %s
+                )
+                UNION ALL
+                (
+                    SELECT m.fund_code as code, m.fund_name as name, m.investment_type as type, c.name as company, 3 as priority
+                    FROM fund_metadata m
+                    LEFT JOIN fund_companies c ON m.company_id = c.company_id
+                    WHERE m.fund_name LIKE %s
+                    AND m.fund_code NOT LIKE %s
+                    AND m.pinyin_shorthand NOT LIKE %s
+                )
+                ORDER BY priority ASC, code ASC
+                LIMIT %s
+            """, (f"{query}%", f"{query.upper()}%", f"{query}%", f"%%{query}%%", f"{query}%", f"{query.upper()}%", limit))
+            
+            rows = cursor.fetchall()
+            conn.close()
+            return [dict(row) for row in rows]
+        except Exception as e:
+            logger.error(f"Search Funds Metadata Failed: {e}")
+            return []

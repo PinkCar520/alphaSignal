@@ -362,7 +362,7 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
     };
 
     return (
-        <div className="min-h-screen p-4 md:p-6 lg:p-8 font-sans bg-white text-slate-900">
+        <div className="h-screen flex flex-col p-4 md:p-6 lg:p-8 font-sans bg-white text-slate-900 overflow-hidden">
             <header className="mb-8">
                 <h1 className="text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-blue-400 flex items-center gap-3">
                     <span>💎</span>
@@ -373,12 +373,13 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
                 </p>
             </header>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-0">
                 {/* Left: Watchlist */}
-                <div className="lg:col-span-4">
+                <div className="lg:col-span-4 h-full min-h-0">
                     <Card
                         title={t('watchlist')}
-                        className="overflow-visible"
+                        className="h-full flex flex-col overflow-hidden"
+                        contentClassName="flex-1 min-h-0 flex flex-col p-3"
                         action={
                             <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
                                 <button
@@ -407,7 +408,7 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
                             </div>
                         }
                     >
-                        <div className="flex flex-col h-[calc(100vh-12rem)]">
+                        <div className="flex flex-col h-full min-h-0">
                             <div className="mb-4 shrink-0 relative z-20">
                                 <FundSearch
                                     onAddFund={async (code, name) => {
@@ -518,9 +519,9 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
                 </div>
 
                 {/* Right: Details */}
-                <div className="lg:col-span-8">
+                <div className="lg:col-span-8 h-full min-h-0">
                     {valuation ? (
-                        <div className="flex flex-col gap-6">
+                        <div className="flex flex-col gap-6 h-full">
                             {/* Main KPI Card */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <Card className="md:col-span-2 relative overflow-hidden bg-white">
@@ -586,8 +587,12 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
                             </div>
 
                             {/* Attribution Table */}
-                            <Card title={t('attribution')}>
-                                <div className="overflow-x-auto overflow-y-auto max-h-[500px] custom-scrollbar">
+                            <Card
+                                title={t('attribution')}
+                                className="flex-1 min-h-0 flex flex-col overflow-hidden"
+                                contentClassName="flex-1 min-h-0 flex flex-col p-0"
+                            >
+                                <div className="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar">
                                     <table className="w-full text-left border-collapse text-sm">
                                         <thead className="sticky top-0 bg-white z-10">
                                             <tr className="border-b border-slate-200 text-slate-500 text-[10px] uppercase tracking-wider shadow-sm bg-slate-50/80 backdrop-blur">
@@ -635,7 +640,7 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
                         </div>
                     )}
                 </div>
-            </div >
-        </div >
+            </div>
+        </div>
     );
 }

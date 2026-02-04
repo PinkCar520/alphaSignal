@@ -3,9 +3,10 @@ import React from 'react';
 interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   title?: string;
   action?: React.ReactNode;
+  contentClassName?: string;
 }
 
-export function Card({ className = '', title, action, children, ...props }: CardProps) {
+export function Card({ className = '', title, action, children, contentClassName, ...props }: CardProps) {
   const baseClasses = "bg-white rounded-xl overflow-hidden shadow-sm border border-slate-200 transition-all duration-300 hover:shadow-md";
   const combinedClasses = `${baseClasses} ${className}`.trim();
 
@@ -20,7 +21,7 @@ export function Card({ className = '', title, action, children, ...props }: Card
           {action && <div>{action}</div>}
         </div>
       )}
-      <div className="p-5">
+      <div className={contentClassName || "p-5"}>
         {children}
       </div>
     </div>

@@ -50,15 +50,25 @@ export default function FundSearch({ onAddFund, existingCodes, placeholder = '�
         }
     }, []);
 
+    // Clear search history
+    const clearHistory = () => {
+        setSearchHistory([]);
+        if (typeof window !== 'undefined') {
+            localStorage.removeItem('fund_search_history_v2');
+        }
+    };
+
     // Save search history to localStorage
-    const saveToHistory = (fund: { code: string, name: string }) => {
+    const saveToHistory = (fund: { code: string, name: string, type?: string, company?: string }) => {
         // Remove existing if any
         const filtered = searchHistory.filter(item => item.code !== fund.code);
-        // Add to front
+        // Add to front with all metadata
         const newHistory = [{
             code: fund.code,
-            name: fund.name || '未命名基金'
-        }, ...filtered].slice(0, 5);
+            name: fund.name || '未命名基金',
+            type: fund.type,
+            company: fund.company
+        }, ...filtered].slice(0, 8); // Store up to 8 items
 
         setSearchHistory(newHistory);
         if (typeof window !== 'undefined') {
@@ -110,7 +120,7 @@ export default function FundSearch({ onAddFund, existingCodes, placeholder = '�
             // Set new timeout
             searchTimeoutRef.current = setTimeout(() => {
                 performSearch(val);
-            }, 800);
+            }, 300);
         } else {
             setSearchResults([]);
             setIsLoading(false);
@@ -140,7 +150,12 @@ export default function FundSearch({ onAddFund, existingCodes, placeholder = '�
     const handleSelect = (fund: FundSearchResult) => {
         onAddFund(fund.code, fund.name);
         // Save full object to history
-        saveToHistory({ code: fund.code, name: fund.name });
+        saveToHistory({
+            code: fund.code,
+            name: fund.name,
+            type: fund.type,
+            company: fund.company
+        });
         setQuery('');
         setIsOpen(false);
         setActiveIndex(-1);
@@ -196,12 +211,8 @@ export default function FundSearch({ onAddFund, existingCodes, placeholder = '�
     // Removed popularFunds state
 
     const getRecommendations = (): FundSearchResult[] => {
-        if (searchHistory.length === 0) {
-            return [];
-        }
-
-        // Filter out already added funds from history
-        return searchHistory.filter(f => !existingCodes.includes(f.code));
+        // Now returns ALL history, no more filtering by 'existingCodes'
+        return searchHistory;
     };
 
     const displayItems = query ? searchResults : getRecommendations();
@@ -236,138 +247,146 @@ export default function FundSearch({ onAddFund, existingCodes, placeholder = '�
 
             {/* Dropdown */}
             {isOpen && (
-                <div className="absolute z-50 w-full mt-2 bg-white border border-slate-200 rounded-md shadow-2xl max-h-80 overflow-y-auto">
-                    {/* Loading State */}
-                    {isLoading && query && (
-                        <div className="p-4 text-center">
-                            <div className="animate-spin w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-2"></div>
-                            <p className="text-sm text-slate-500">搜索中...</p>
-                        </div>
-                    )}
-
-                    {/* Results */}
-                    {!isLoading && displayItems.length > 0 && (
-                        <>
-                            {/* Header */}
-                            <div className="px-3 py-2 border-b border-slate-100">
-                                <div className="flex items-center gap-2 text-xs text-slate-500 uppercase tracking-wider">
-                                    {query ? (
-                                        <>
-                                            <Search className="w-3 h-3" />
-                                            <span>搜索结果 ({searchResults.length})</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            {searchHistory.length > 0 ? (
-                                                <>
+                <div className="absolute z-50 w-full mt-2 bg-white border border-slate-200 rounded-md shadow-2xl max-h-80 overflow-y-auto flex flex-col min-h-[100px]">
+                    {/* Content Layer */}
+                    <div className={`flex-1 flex flex-col transition-opacity duration-200 ${isLoading ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
+                        {displayItems.length > 0 ? (
+                            <>
+                                {/* Header */}
+                                <div className="px-3 py-2 border-b border-slate-100 shrink-0 bg-white sticky top-0 z-10">
+                                    <div className="flex items-center gap-2 text-xs text-slate-500 uppercase tracking-wider">
+                                        {query ? (
+                                            <>
+                                                <Search className="w-3 h-3" />
+                                                <span>搜索结果 ({searchResults.length})</span>
+                                            </>
+                                        ) : (
+                                            <div className="flex items-center justify-between w-full">
+                                                <div className="flex items-center gap-2">
                                                     <Clock className="w-3 h-3" />
                                                     <span>最近搜索</span>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <TrendingUp className="w-3 h-3" />
-                                                    <span>热门基金</span>
-                                                </>
-                                            )}
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Results List */}
-                            <div className="py-1">
-                                {displayItems.map((fund, index) => {
-                                    const isActive = index === activeIndex;
-                                    const isHistory = !query && searchHistory.some(h => h.code === fund.code);
-                                    const isAdded = existingCodes.includes(fund.code);
-
-                                    return (
-                                        <button
-                                            key={fund.code}
-                                            onClick={() => !isAdded && handleSelect(fund)}
-                                            onMouseEnter={() => setActiveIndex(index)}
-                                            disabled={isAdded}
-                                            className={`w-full px-3 py-2 text-left transition-colors ${isActive
-                                                ? 'bg-blue-50 border-l-2 border-blue-600'
-                                                : 'hover:bg-slate-50 border-l-2 border-transparent'
-                                                } ${isAdded ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                        >
-                                            <div className="flex items-start justify-between gap-2">
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="font-bold text-sm text-slate-800 truncate">
-                                                            {fund.name}
-                                                        </span>
-                                                        {isHistory && (
-                                                            <Clock className="w-3 h-3 text-slate-500 shrink-0" />
-                                                        )}
-                                                        {isAdded && (
-                                                            <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-400 rounded-full font-mono border border-slate-200">
-                                                                已添加
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <div className="flex items-center gap-2 mt-0.5">
-                                                        <span className="font-mono text-xs text-slate-500">
-                                                            {fund.code}
-                                                        </span>
-                                                        {fund.type && (
-                                                            <>
-                                                                <span className="text-slate-700">•</span>
-                                                                <span className="text-xs text-slate-600">
-                                                                    {fund.type}
-                                                                </span>
-                                                            </>
-                                                        )}
-                                                        {fund.company && (
-                                                            <>
-                                                                <span className="text-slate-700">•</span>
-                                                                <span className="text-xs text-slate-600 truncate">
-                                                                    {fund.company}
-                                                                </span>
-                                                            </>
-                                                        )}
-                                                    </div>
                                                 </div>
-                                                {!isAdded && (
-                                                    <Plus className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+                                                {searchHistory.length > 0 && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            clearHistory();
+                                                        }}
+                                                        className="text-[10px] text-blue-600 hover:text-blue-700 normal-case tracking-normal"
+                                                    >
+                                                        清空历史
+                                                    </button>
                                                 )}
                                             </div>
-                                        </button>
-                                    );
-                                })}
-                            </div>
+                                        )}
+                                    </div>
+                                </div>
 
-                            {/* Footer Hint */}
-                            <div className="px-3 py-2 border-t border-slate-100 bg-slate-50">
-                                <p className="text-xs text-slate-500">
-                                    <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px] text-slate-400">↑</kbd>
-                                    <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px] ml-1 text-slate-400">↓</kbd>
-                                    {' '}导航 {' '}
-                                    <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px] text-slate-400">Enter</kbd>
-                                    {' '}选择 {' '}
-                                    <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px] text-slate-400">Esc</kbd>
-                                    {' '}关闭
-                                </p>
-                            </div>
-                        </>
-                    )}
+                                {/* Results List */}
+                                <div className="py-1">
+                                    {displayItems.map((fund, index) => {
+                                        const isActive = index === activeIndex;
+                                        const isHistory = !query && searchHistory.some(h => h.code === fund.code);
+                                        const isAdded = existingCodes.includes(fund.code);
 
-                    {/* No Results */}
-                    {!isLoading && query && searchResults.length === 0 && (
-                        <div className="p-4 text-center">
-                            <p className="text-sm text-slate-500 mb-2">未找到匹配的基金</p>
-                            <button
-                                onClick={() => {
-                                    onAddFund(query.trim(), '');
-                                    saveToHistory({ code: query.trim(), name: '自定义添加' });
-                                    setQuery('');
-                                    setIsOpen(false);
-                                }}
-                                className="text-xs text-blue-600 hover:text-blue-700 transition-colors"
-                            >
-                                直接添加代码 "{query}"
-                            </button>
+                                        return (
+                                            <button
+                                                key={fund.code}
+                                                onClick={() => !isAdded && handleSelect(fund)}
+                                                onMouseEnter={() => setActiveIndex(index)}
+                                                disabled={isAdded}
+                                                className={`w-full px-3 py-2 text-left transition-colors ${isActive
+                                                    ? 'bg-blue-50 border-l-2 border-blue-600'
+                                                    : 'hover:bg-slate-50 border-l-2 border-transparent'
+                                                    } ${isAdded ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                            >
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-bold text-sm text-slate-800 truncate">
+                                                                {fund.name}
+                                                            </span>
+                                                            {isHistory && (
+                                                                <Clock className="w-3 h-3 text-slate-500 shrink-0" />
+                                                            )}
+                                                            {isAdded && (
+                                                                <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-400 rounded-full font-mono border border-slate-200">
+                                                                    已添加
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex items-center gap-2 mt-0.5">
+                                                            <span className="font-mono text-xs text-slate-500">
+                                                                {fund.code}
+                                                            </span>
+                                                            {fund.type && (
+                                                                <>
+                                                                    <span className="text-slate-700">•</span>
+                                                                    <span className="text-xs text-slate-600">
+                                                                        {fund.type}
+                                                                    </span>
+                                                                </>
+                                                            )}
+                                                            {fund.company && (
+                                                                <>
+                                                                    <span className="text-slate-700">•</span>
+                                                                    <span className="text-xs text-slate-600 truncate">
+                                                                        {fund.company}
+                                                                    </span>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    {!isAdded && (
+                                                        <Plus className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+                                                    )}
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Footer Hint */}
+                                <div className="px-3 py-2 border-t border-slate-100 bg-slate-50 mt-auto sticky bottom-0">
+                                    <p className="text-xs text-slate-500">
+                                        <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px] text-slate-400">↑</kbd>
+                                        <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px] ml-1 text-slate-400">↓</kbd>
+                                        {' '}导航 {' '}
+                                        <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px] text-slate-400">Enter</kbd>
+                                        {' '}选择 {' '}
+                                        <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px] text-slate-400">Esc</kbd>
+                                        {' '}关闭
+                                    </p>
+                                </div>
+                            </>
+                        ) : query && !isLoading ? (
+                            <div className="p-8 text-center flex-1 flex flex-col items-center justify-center">
+                                <p className="text-sm text-slate-500 mb-3">未找到匹配的基金</p>
+                                <button
+                                    onClick={() => {
+                                        onAddFund(query.trim(), '');
+                                        saveToHistory({ code: query.trim(), name: '自定义添加' });
+                                        setQuery('');
+                                        setIsOpen(false);
+                                    }}
+                                    className="px-4 py-2 bg-blue-50 text-blue-600 rounded-md text-xs font-medium hover:bg-blue-100 transition-colors border border-blue-100"
+                                >
+                                    直接添加代码 "{query}"
+                                </button>
+                            </div>
+                        ) : !query && searchHistory.length === 0 ? (
+                            <div className="p-8 text-center text-slate-400">
+                                <Search className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                                <p className="text-sm">输入代码搜索基金</p>
+                            </div>
+                        ) : null}
+                    </div>
+
+                    {/* Loading Overlay - Prevents Flickering by overlaying instead of replacing */}
+                    {isLoading && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/10 backdrop-blur-[1px] z-20">
+                            <div className="animate-spin w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full mb-2"></div>
+                            {displayItems.length === 0 && <p className="text-xs text-slate-500 animate-pulse">正在检索数据库...</p>}
                         </div>
                     )}
                 </div>

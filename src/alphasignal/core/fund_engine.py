@@ -572,28 +572,42 @@ class FundEngine:
 
     def search_funds(self, query: str, limit: int = 20):
         """
-        Search for funds by code or name using akshare.
-        
-        Args:
-            query: Search query (fund code or name)
-            limit: Maximum number of results to return
-            
-        Returns:
-            List of fund dictionaries with code, name, type, and company
+        Search for funds by code or name using local DB first, fallback to akshare.
         """
+        q_strip = query.strip()
+        if not q_strip:
+            return []
+        
+        # 1. Try local database first (Extremely fast, 10ms level)
+        try:
+            local_results = self.db.search_funds_metadata(q_strip, limit)
+            
+            # If we found ANYTHING locally, trust it and return immediately.
+            # We have 26k+ funds synced, so local coverage is excellent for A-shares.
+            if local_results:
+                logger.info(f"🚀 [Local Hit] Found {len(local_results)} funds for query: {q_strip}")
+                return local_results
+        except Exception as e:
+            logger.warning(f"Local search failed: {e}")
+            local_results = []
+
+        # 2. Hard Fallback (0 results locally)
+        # This only happens for brand-new funds or non-A-share funds not in metadata.
+
+        # 2. Fallback to API/AkShare for missing or niche funds
         # Check cache first (24 hour TTL for fund list)
         cache_key = f"fund:search:{query.lower()}"
         if self.redis:
             try:
                 cached = self.redis.get(cache_key)
                 if cached:
-                    logger.info(f"[Cache Hit] Fund search: {query}")
+                    logger.info(f"[Cache Hit] Fund search API: {query}")
                     return json.loads(cached)
             except Exception as e:
                 logger.warning(f"Redis cache read failed: {e}")
         
         try:
-            logger.info(f"🔍 Searching funds: {query}")
+            logger.info(f"🔍 Falling back to AkShare search: {query}")
             
             # Disable proxy for akshare
             original_http = os.environ.get('HTTP_PROXY')
@@ -614,10 +628,7 @@ class FundEngine:
                 
                 if df.empty:
                     logger.warning("akshare returned empty dataframe")
-                    return []
-                
-                # Log available columns for debugging
-                logger.info(f"Available columns: {df.columns.tolist()}")
+                    return local_results # Return whatever we found locally
                 
                 # Detect column names (akshare may use different names)
                 code_col = None
@@ -637,8 +648,8 @@ class FundEngine:
                         company_col = col
                 
                 if not code_col or not name_col:
-                    logger.error(f"Cannot find code/name columns in: {df.columns.tolist()}")
-                    return []
+                    logger.error(f"Cannot find code/name columns in AkShare response")
+                    return local_results
                 
                 # Filter by query (code or name)
                 q = query.lower()
@@ -649,18 +660,26 @@ class FundEngine:
                 filtered = df[mask].head(limit)
                 
                 # Format results
-                results = []
+                api_results = []
                 for _, row in filtered.iterrows():
-                    results.append({
+                    api_results.append({
                         'code': str(row[code_col]),
                         'name': str(row[name_col]),
                         'type': str(row[type_col]) if type_col and type_col in row else '混合型',
                         'company': str(row[company_col]) if company_col and company_col in row else ''
                     })
                 
-                logger.info(f"Found {len(results)} results for query: {query}")
+                # Merge local and API results, removing duplicates
+                seen_codes = {r['code'] for r in local_results}
+                merged_results = list(local_results)
+                for r in api_results:
+                    if r['code'] not in seen_codes:
+                        merged_results.append(r)
                 
-                # Cache results for 24 hours
+                results = merged_results[:limit]
+                logger.info(f"Found {len(results)} results (merged) for query: {query}")
+                
+                # Cache results
                 if self.redis and results:
                     try:
                         self.redis.setex(cache_key, 86400, json.dumps(results))
@@ -675,8 +694,10 @@ class FundEngine:
                     os.environ['HTTP_PROXY'] = original_http
                 if original_https:
                     os.environ['HTTPS_PROXY'] = original_https
-                raise e
+                logger.error(f"AkShare search failed: {e}")
+                return local_results
                 
         except Exception as e:
-            logger.error(f"Fund search failed: {e}")
-            return []
+            logger.error(f"Fund search fallback failed: {e}")
+            return local_results
+
