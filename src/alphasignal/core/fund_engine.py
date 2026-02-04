@@ -104,6 +104,67 @@ class FundEngine:
             pass
         return fund_name
 
+    def _get_industry_map(self, stock_codes: list):
+        """
+        Fetch industry mapping for a list of stocks.
+        Strategy: Redis Hash 'stock:industry:l1' -> DB -> Cache
+        """
+        if not stock_codes: return {}
+        if not self.redis: return {}
+        
+        # 1. Try Fetch from Redis
+        try:
+            # We use a single Hash for all mappings: "stock:industry:l1"
+            # Getting multiple fields
+            industries = self.redis.hmget("stock:industry:l1", stock_codes)
+            
+            result = {}
+            missing_codes = []
+            
+            for code, ind in zip(stock_codes, industries):
+                if ind:
+                    result[code] = ind
+                else:
+                    missing_codes.append(code)
+            
+            # If all found, return
+            if not missing_codes:
+                return result
+                
+            # 2. Fetch missing from DB
+            if missing_codes:
+                # logger.info(f"Fetching {len(missing_codes)} missing industries from DB")
+                conn = self.db.get_connection()
+                try:
+                    with conn.cursor() as cursor:
+                        # Use ANY for array check in Postgres
+                        cursor.execute("SELECT stock_code, industry_l1_name FROM stock_metadata WHERE stock_code = ANY(%s)", (missing_codes,))
+                        rows = cursor.fetchall()
+                        
+                        db_map = {r[0]: r[1] for r in rows}
+                        result.update(db_map)
+                        
+                        # Cache found ones back to Redis
+                        if db_map:
+                            self.redis.hset("stock:industry:l1", mapping=db_map)
+                            
+                        # Mark unknowns to avoid repeated DB hits? (Optional, maybe "Unknown")
+                        unknowns = set(missing_codes) - set(db_map.keys())
+                        if unknowns:
+                             # Cache as "其他" or "Unknown"
+                             unknown_map = {c: "其他" for c in unknowns}
+                             self.redis.hset("stock:industry:l1", mapping=unknown_map)
+                             result.update(unknown_map)
+                             
+                finally:
+                    conn.close()
+                    
+            return result
+            
+        except Exception as e:
+            logger.error(f"Industry map fetch failed: {e}")
+            return {}
+
     def calculate_realtime_valuation(self, fund_code):
         """Calculate live estimated NAV growth based on holdings (Source: EastMoney/AkShare)."""
         # 0. Check Cache (Fund Valuation Result)
@@ -277,6 +338,7 @@ class FundEngine:
                                 "impact": est_growth,
                                 "weight": 95.0
                             }],
+                            "sector_attribution": {}, # ETF treated as single unit for now
                             "timestamp": datetime.now().isoformat(),
                             "source": "ETF Feeder Penetration"
                         }
@@ -287,10 +349,17 @@ class FundEngine:
                 except Exception as e:
                     logger.error(f"Feeder calc failed: {e}")
 
-            # 4. Calculate Valuation
+            # 4. Calculate Valuation & Sector Attribution
             total_impact = 0.0
             total_weight = 0.0
             components = []
+            
+            # Init Sector Map
+            sector_stats = {} # "IndustryName": {"impact": 0, "weight": 0}
+            
+            # Bulk fetch industry mapping for these holdings
+            holding_codes = [h.get('stock_code') or h.get('code') for h in holdings]
+            industry_map = self._get_industry_map(holding_codes)
             
             for h in holdings:
                 code = h.get('stock_code') or h.get('code')
@@ -298,10 +367,13 @@ class FundEngine:
                 name = h.get('stock_name') or h.get('name') or code
                 
                 quote = quote_map.get(code)
+                current_impact = 0.0
+                
                 if quote:
                     price = quote['price']
                     pct = quote['change_pct']
                     impact = pct * (weight / 100.0)
+                    current_impact = impact
                     
                     total_impact += impact
                     total_weight += weight
@@ -324,8 +396,15 @@ class FundEngine:
                         "weight": weight,
                         "note": "No Quote"
                     })
+                    
+                # Sector Aggregation
+                industry = industry_map.get(code, "其他")
+                if industry not in sector_stats:
+                    sector_stats[industry] = {"impact": 0.0, "weight": 0.0}
+                sector_stats[industry]["impact"] += current_impact
+                sector_stats[industry]["weight"] += weight
 
-             # RE-CHECK for Feeder (if component weight is low)
+            # RE-CHECK for Feeder (if component weight is low)
             if total_weight < 40 and "联接" in fund_name:
                  # Try to find ETF in components that was missed or treat name match
                  # If we missed the ETF in holdings (maybe not in top 10?), we can't do much without external mapping.
@@ -363,7 +442,8 @@ class FundEngine:
                 "fund_name": fund_name,
                 "estimated_growth": round(final_est, 4),
                 "total_weight": total_weight,
-                "components": components, 
+                "components": components,
+                "sector_attribution": sector_stats,
                 "timestamp": datetime.now(tz_cn).isoformat(),
                 "source": "EastMoney" + calibration_note
             }
@@ -494,6 +574,15 @@ class FundEngine:
         results = []
         tz_cn = datetime.now().astimezone().replace(tzinfo=None) # simple local time
         
+        # Pre-fetch all industry mappings for the entire batch to be efficient
+        all_stock_codes = []
+        for f_code, holdings in all_holdings.items():
+            for h in holdings:
+                s_code = h.get('stock_code') or h.get('code')
+                if s_code: all_stock_codes.append(s_code)
+        
+        industry_map = self._get_industry_map(list(set(all_stock_codes)))
+
         for f_code in fund_codes:
             holdings = all_holdings.get(f_code, [])
             if not holdings:
@@ -503,6 +592,7 @@ class FundEngine:
             total_impact = 0.0
             total_weight = 0.0
             components = []
+            sector_stats = {} # "IndustryName": {"impact": 0, "weight": 0}
             
             for h in holdings:
                 code = h.get('stock_code') or h.get('code')
@@ -510,10 +600,13 @@ class FundEngine:
                 weight = h['weight']
                 
                 q = quotes.get(code)
+                current_impact = 0.0
+                
                 if q:
                     price = q['price']
                     pct = q['change_pct']
                     impact = pct * (weight / 100.0)
+                    current_impact = impact
                     total_impact += impact
                     total_weight += weight
                     components.append({
@@ -525,6 +618,13 @@ class FundEngine:
                         "code": code, "name": name, "price": 0, 
                         "change_pct": 0, "impact": 0, "weight": weight, "note": "No Quote"
                     })
+                
+                # Sector Aggregation
+                industry = industry_map.get(code, "其他")
+                if industry not in sector_stats:
+                    sector_stats[industry] = {"impact": 0.0, "weight": 0.0}
+                sector_stats[industry]["impact"] += current_impact
+                sector_stats[industry]["weight"] += weight
             
             final_est = 0.0
             if total_weight > 0:
@@ -558,6 +658,7 @@ class FundEngine:
                 "estimated_growth": round(final_est, 4),
                 "total_weight": total_weight,
                 "components": components,
+                "sector_attribution": sector_stats,
                 "timestamp": datetime.now().isoformat(),
                 "source": "EastMoney Batch" + calibration_note
             }

@@ -120,6 +120,31 @@ class IntelligenceDB:
                 CREATE INDEX IF NOT EXISTS idx_company_name ON fund_companies(name);
             """)
 
+            # --- Industry Attribution Tables (Added 2026-02-04) ---
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS industry_definitions (
+                    industry_code VARCHAR(20) PRIMARY KEY,
+                    industry_name VARCHAR(50) NOT NULL,
+                    level INTEGER NOT NULL,
+                    parent_code VARCHAR(20)
+                );
+            """)
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS stock_metadata (
+                    stock_code VARCHAR(10) PRIMARY KEY,
+                    stock_name VARCHAR(50),
+                    industry_l1_code VARCHAR(20),
+                    industry_l1_name VARCHAR(50),
+                    industry_l2_code VARCHAR(20),
+                    industry_l2_name VARCHAR(50),
+                    market VARCHAR(10),
+                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX IF NOT EXISTS idx_stock_industry_l1 ON stock_metadata(industry_l1_name);
+                CREATE INDEX IF NOT EXISTS idx_stock_industry_l2 ON stock_metadata(industry_l2_name);
+            """)
+
             # Fund Metadata Main Table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS fund_metadata (

@@ -138,6 +138,8 @@
     "sortAsc": "涨幅: 从低到高",
     "sortDesc": "涨幅: 从高到低",
     "refreshData": "刷新数据",
-    "sourceLabel": "数据来源: {source}"
+    "sourceLabel": "数据来源: {source}",
+    "sectorAttribution": "板块归因分析",
+    "byShenwanL1": "申万一级行业分类"
   }
 }

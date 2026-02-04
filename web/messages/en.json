@@ -138,6 +138,8 @@
     "sortAsc": "Performance: Low to High",
     "sortDesc": "Performance: High to Low",
     "refreshData": "Refresh Data",
-    "sourceLabel": "Source: {source}"
+    "sourceLabel": "Source: {source}",
+    "sectorAttribution": "Sector Attribution",
+    "byShenwanL1": "Shenwan L1 Industry Classification"
   }
 }

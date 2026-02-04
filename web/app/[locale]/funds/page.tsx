@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Search, RefreshCw, ArrowUp, ArrowDown, PieChart, X, Target, Scale, Anchor, AlertTriangle } from 'lucide-react';
 import FundSearch from '@/components/FundSearch';
+import { SectorAttribution } from '@/components/SectorAttribution';
 
 interface ComponentStock {
     code: string;
@@ -22,6 +23,7 @@ interface FundValuation {
     estimated_growth: number;
     total_weight: number;
     components: ComponentStock[];
+    sector_attribution?: Record<string, { impact: number, weight: number }>;
     timestamp: string;
     source?: string;
 }
@@ -639,11 +641,19 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
                             >
                                 <div className="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar">
                                     {activeTab === 'attribution' ? (
-                                        <table className="w-full text-left border-collapse text-sm">
-                                            <thead className="sticky top-0 bg-white z-10">
-                                                <tr className="border-b border-slate-200 text-slate-500 text-[10px] uppercase tracking-wider shadow-sm bg-slate-50/80 backdrop-blur">
-                                                    <th className="p-3">{t('tableStock')}</th>
-                                                    <th className="p-3 text-right">{t('tablePrice')}</th>
+                                        <div className="flex flex-col h-full">
+                                            {/* Sector Attribution Chart */}
+                                            {valuation.sector_attribution && (
+                                                <div className="px-3 pb-4">
+                                                    <SectorAttribution data={valuation.sector_attribution} />
+                                                </div>
+                                            )}
+                                            
+                                            <table className="w-full text-left border-collapse text-sm">
+                                                <thead className="sticky top-0 bg-white z-10">
+                                                    <tr className="border-b border-slate-200 text-slate-500 text-[10px] uppercase tracking-wider shadow-sm bg-slate-50/80 backdrop-blur">
+                                                        <th className="p-3">{t('tableStock')}</th>
+                                                        <th className="p-3 text-right">{t('tablePrice')}</th>
                                                     <th className="p-3 text-right">{t('tableChange')}</th>
                                                     <th className="p-3 text-right">{t('tableWeight')}</th>
                                                     <th className="p-3 text-right">{t('tableImpact')}</th>
@@ -677,6 +687,7 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
                                                     ))}
                                             </tbody>
                                         </table>
+                                        </div>
                                     ) : (
                                         <div className="flex flex-col h-full">
                                             {historyLoading ? (
