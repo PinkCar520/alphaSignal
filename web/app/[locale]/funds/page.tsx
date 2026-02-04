@@ -394,14 +394,14 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
                                 <button
                                     onClick={() => setSortOrder(sortOrder === 'asc' ? 'none' : 'asc')}
                                     className={`p-1 rounded-md transition-all ${sortOrder === 'asc' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200'}`}
-                                    title="涨幅从低到高"
+                                    title={t('sortAsc')}
                                 >
                                     <ArrowUp className="w-3.5 h-3.5" />
                                 </button>
                                 <button
                                     onClick={() => setSortOrder(sortOrder === 'desc' ? 'none' : 'desc')}
                                     className={`p-1 rounded-md transition-all ${sortOrder === 'desc' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200'}`}
-                                    title="涨幅从高到低"
+                                    title={t('sortDesc')}
                                 >
                                     <ArrowDown className="w-3.5 h-3.5" />
                                 </button>
@@ -421,7 +421,8 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
                                                 });
                                                 const data = await res.json();
                                                 if (data.success) {
-                                                    setWatchlist(prev => [...prev, { code, name }]);
+                                                    // Add to START of list for immediate visibility
+                                                    setWatchlist(prev => [{ code, name }, ...prev]);
                                                     setSelectedFund(code);
                                                 }
                                             } catch (err) {
@@ -440,16 +441,18 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
                                 {watchlist
                                     .slice() // Create a copy to avoid mutating state
                                     .sort((a, b) => {
+                                        if (a.estimated_growth === undefined && b.estimated_growth === undefined) return 0;
+                                        if (a.estimated_growth === undefined) return -1;
+                                        if (b.estimated_growth === undefined) return 1;
+
                                         if (sortOrder === 'none') return 0;
 
-                                        // Funds without growth data go to the end
-                                        if (a.estimated_growth === undefined && b.estimated_growth === undefined) return 0;
-                                        if (a.estimated_growth === undefined) return 1;
-                                        if (b.estimated_growth === undefined) return -1;
+                                        const valA = a.estimated_growth;
+                                        const valB = b.estimated_growth;
 
                                         return sortOrder === 'desc'
-                                            ? b.estimated_growth - a.estimated_growth
-                                            : a.estimated_growth - b.estimated_growth;
+                                            ? valB - valA
+                                            : valA - valB;
                                     })
                                     .map(item => (
                                         <div
@@ -540,7 +543,7 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
                                                     onClick={handleManualRefresh}
                                                     disabled={loading || refreshing}
                                                     className="p-2 hover:bg-slate-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                    title="Refresh data"
+                                                    title={t('refreshData')}
                                                 >
                                                     <RefreshCw className={`w-4 h-4 text-slate-400 transition-transform ${refreshing ? 'animate-spin' : ''}`} />
                                                 </button>
@@ -556,7 +559,7 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
                                             {/* Source & Calibration Note */}
                                             {valuation.source && (
                                                 <div className="mt-1 opacity-70">
-                                                    Source: {valuation.source}
+                                                    {t('sourceLabel', { source: valuation.source })}
                                                 </div>
                                             )}
                                         </div>

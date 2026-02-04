@@ -112,6 +112,21 @@
     "tableWeight": "Weight",
     "tableImpact": "Impact",
     "refreshWatchlist": "Refresh Watchlist",
-    "selectFund": "Select a fund to calculate valuation"
+    "selectFund": "Select a fund to calculate valuation",
+    "searchMatches": "Market Matches",
+    "recentQueries": "Recent Queries",
+    "clearHistory": "Clear",
+    "addedLabel": "Added",
+    "navNavigate": "Navigate",
+    "navSelect": "Select",
+    "navClose": "Close",
+    "noResults": "No funds found",
+    "addDirectly": "Add code \"{query}\" directly",
+    "promptSearch": "Enter code to search funds",
+    "scanningPool": "Scanning public fund pool...",
+    "sortAsc": "Performance: Low to High",
+    "sortDesc": "Performance: High to Low",
+    "refreshData": "Refresh Data",
+    "sourceLabel": "Source: {source}"
   }
 }
