@@ -730,44 +730,62 @@ class FundEngine:
         logger.info(f"✅ Successfully archived {count} snapshots for {trade_date}")
 
     def reconcile_official_valuations(self, trade_date=None):
-        """Fetch real growth for a specific date and update the archive."""
+        """
+        Fetch real growth for specific funds in the archive by looking up 
+        their historical NAV series. Targeted and precise.
+        """
         if trade_date is None:
-            # Default to yesterday if it's morning, or today if it's late night
-            trade_date = (datetime.now() - timedelta(days=1)).date()
+            # Default to the most recent archive date that hasn't been reconciled
+            trade_date = datetime.now().date()
             
-        # Get funds that have a snapshot but no official growth yet
-        # (Need a helper for this or just fetch all for that date)
-        # For simplicity, we fetch all for that date from archive
+        # 1. Get the list of funds that need reconciliation for this date
         conn = self.db.get_connection()
         try:
             with conn.cursor() as cursor:
-                cursor.execute("SELECT fund_code FROM fund_valuation_archive WHERE trade_date = %s AND official_growth IS NULL", (trade_date,))
+                cursor.execute("""
+                    SELECT fund_code FROM fund_valuation_archive 
+                    WHERE trade_date = %s AND official_growth IS NULL
+                """, (trade_date,))
                 codes = [row[0] for row in cursor.fetchall()]
         finally:
             conn.close()
             
         if not codes:
-            logger.info(f"No pending reconciliation for {trade_date}")
+            logger.info(f"No pending reconciliation found for {trade_date}")
             return
 
-        logger.info(f"⚖️ Starting Official Reconciliation for {len(codes)} funds on {trade_date}...")
+        logger.info(f"⚖️ Starting Targeted Reconciliation for {len(codes)} funds on {trade_date}...")
         
-        # Fetching official growth one by one or via a listing API
-        # Listing API is faster: ak.fund_open_fund_daily_em() gives today's growth for ALL funds
-        try:
-            df_all = ak.fund_open_fund_daily_em()
-            # Columns: 基金代码, 基金简称, 单位净值, 累计净值, 前一交易日-单位净值, 前一交易日-累计净值, 日增长率, ...
+        count = 0
+        for code in codes:
+            try:
+                # 2. Fetch the historical NAV series for this specific fund
+                # This is more robust than a daily dump as it allows historical backfilling
+                df = ak.fund_open_fund_info_em(symbol=code, indicator="单位净值走势")
+                
+                if df.empty:
+                    logger.warning(f"No NAV history found for {code}")
+                    continue
+                
+                # df usually has columns: ['净值日期', '单位净值', '日增长率', ...]
+                # Convert '净值日期' to date objects for comparison
+                df['净值日期'] = pd.to_datetime(df['净值日期']).dt.date
+                
+                # 3. Find the record matching our trade_date
+                match = df[df['净值日期'] == trade_date]
+                
+                if not match.empty:
+                    # '日增长率' is usually a string like "1.23" or "0.00"
+                    official_growth = float(match.iloc[0]['日增长率'])
+                    
+                    # 4. Update the archive with the official value and trigger grading
+                    self.db.update_official_nav(trade_date, code, official_growth)
+                    count += 1
+                    logger.info(f"🎯 Matched {code}: Est vs Official applied.")
+                else:
+                    logger.info(f"⏳ NAV for {code} on {trade_date} not yet released by fund company.")
+                    
+            except Exception as e:
+                logger.error(f"Failed to reconcile {code}: {e}")
             
-            count = 0
-            for _, row in df_all.iterrows():
-                code = str(row['基金代码'])
-                if code in codes:
-                    try:
-                        growth = float(row['日增长率'])
-                        self.db.update_official_nav(trade_date, code, growth)
-                        count += 1
-                    except: pass
-            
-            logger.info(f"✨ Successfully reconciled {count} funds for {trade_date}")
-        except Exception as e:
-            logger.error(f"Reconciliation Failed: {e}")
+        logger.info(f"✨ Reconciliation session finished. {count}/{len(codes)} funds updated.")
