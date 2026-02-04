@@ -212,6 +212,81 @@ class FundEngine:
                 except Exception as e:
                     logger.error(f"Failed to fetch HK-share snapshot: {e}")
 
+            # 3.5 Check for ETF Feeder Fund Logic
+            # If holdings contain very few stocks or weight is low, check if it's an ETF feeder
+            is_feeder = False
+            target_etf = None
+            
+            # Simple heuristic: if name contains "联接" or "ETF", try to find master ETF
+            fund_name = self._get_fund_name(fund_code)
+            if "联接" in fund_name or "ETF" in fund_name:
+                import re
+                # Clean name: remove suffix, remove "联接", remove "发起"
+                clean_name = re.sub(r'[A-Za-z]+$', '', fund_name)
+                clean_name = clean_name.replace('联接', '').replace('发起式', '').replace('发起', '')
+                clean_name = re.sub(r'\(.*?\)', '', clean_name).strip()
+                
+                # Check directly if we have a mapped ETF in cache or map
+                # For now, let's try to map via name search if we don't have it
+                # Optimization: In a real system, we'd have a mapping table.
+                # Here we do a quick name check against holdings? 
+                # Better: Check if any holding IS an ETF code (51/15/56/58 start)
+                
+                for h in holdings:
+                    c = h.get('stock_code') or h.get('code')
+                    if c and c.startswith(('51', '15', '56', '58')):
+                         # It holds an ETF directly!
+                         is_feeder = True
+                         target_etf = c
+                         logger.info(f"🧩 Feeder Fund detected: {fund_code} holds ETF {target_etf}")
+                         break
+            
+            if is_feeder and target_etf:
+                # Calculate based on ETF price ONLY (simplify)
+                # Need to fetch ETF price. It's an A-share usually.
+                try:
+                    # Reuse quote_map logic, but we need to ensure we fetched this ETF
+                    # If we missed it in A-share snapshot (unlikely if it's in holdings), fetch it now
+                    etf_quote = quote_map.get(target_etf)
+                    
+                    if not etf_quote:
+                         # Try single fetch
+                         try:
+                             # Using simple interface for single quote as fallback
+                             # We can use yfinance or akshare daily
+                             # Faster: just Assume we missed it and rely on next batch or add to need_ashare?
+                             # Actually if it was in holdings, it should be in quote_map if 'a' snapshot covered it.
+                             # If snapshot 'a' covers all A shares, it should be there.
+                             pass
+                         except: pass
+
+                    if etf_quote:
+                        # 100% weight on ETF for estimation
+                        est_growth = etf_quote['change_pct']
+                        
+                        result = {
+                            "fund_code": fund_code,
+                            "fund_name": fund_name,
+                            "estimated_growth": round(est_growth, 4),
+                            "total_weight": 95.0, # Assumed heavy weight
+                            "components": [{
+                                "code": target_etf,
+                                "name": "Target ETF",
+                                "price": etf_quote['price'],
+                                "change_pct": etf_quote['change_pct'],
+                                "impact": est_growth,
+                                "weight": 95.0
+                            }],
+                            "timestamp": datetime.now().isoformat(),
+                            "source": "ETF Feeder Penetration"
+                        }
+                         # Save and return immediately
+                        if self.redis:
+                            self.redis.setex(f"fund:valuation:{fund_code}", 180, json.dumps(result))
+                        return result
+                except Exception as e:
+                    logger.error(f"Feeder calc failed: {e}")
+
             # 4. Calculate Valuation
             total_impact = 0.0
             total_weight = 0.0
@@ -249,6 +324,12 @@ class FundEngine:
                         "weight": weight,
                         "note": "No Quote"
                     })
+
+             # RE-CHECK for Feeder (if component weight is low)
+            if total_weight < 40 and "联接" in fund_name:
+                 # Try to find ETF in components that was missed or treat name match
+                 # If we missed the ETF in holdings (maybe not in top 10?), we can't do much without external mapping.
+                 pass
 
             # 5. Normalize
             final_est = 0.0
