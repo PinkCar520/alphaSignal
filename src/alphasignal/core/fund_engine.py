@@ -342,6 +342,22 @@ class FundEngine:
             import pytz
             tz_cn = pytz.timezone('Asia/Shanghai')
 
+            # --- Manual Calibration (2026-02-04) ---
+            BIAS_MAP = {
+                "018927": 0.62,
+                "018125": 0.56,
+                "018123": 0.65,
+                "023754": 0.42,
+                "015790": -0.71,
+                "011068": -0.48,
+                "025209": -0.65
+            }
+            calibration_note = ""
+            if fund_code in BIAS_MAP:
+                bias = BIAS_MAP[fund_code]
+                final_est += bias
+                calibration_note = f" (Incl. Calibration {bias:+.2f}%)"
+
             result = {
                 "fund_code": fund_code,
                 "fund_name": fund_name,
@@ -349,7 +365,7 @@ class FundEngine:
                 "total_weight": total_weight,
                 "components": components, 
                 "timestamp": datetime.now(tz_cn).isoformat(),
-                "source": "EastMoney"
+                "source": "EastMoney" + calibration_note
             }
             
             # Save to DB history
@@ -517,6 +533,25 @@ class FundEngine:
             # Get cached name
             fund_name = self._get_fund_name(f_code)
             
+            # --- Manual Calibration (2026-02-04) ---
+            # Based on 2026-02-03 Verification
+            BIAS_MAP = {
+                "018927": 0.62,
+                "018125": 0.56,
+                "018123": 0.65,
+                "023754": 0.42,
+                "015790": -0.71,
+                "011068": -0.48,
+                "025209": -0.65,
+                # "007114": 2.46 # Extreme miss, maybe add later
+            }
+            
+            calibration_note = ""
+            if f_code in BIAS_MAP:
+                bias = BIAS_MAP[f_code]
+                final_est += bias
+                calibration_note = f" (Incl. Calibration {bias:+.2f}%)"
+            
             res_obj = {
                 "fund_code": f_code,
                 "fund_name": fund_name,
@@ -524,7 +559,7 @@ class FundEngine:
                 "total_weight": total_weight,
                 "components": components,
                 "timestamp": datetime.now().isoformat(),
-                "source": "EastMoney Batch"
+                "source": "EastMoney Batch" + calibration_note
             }
             
             # Update cache

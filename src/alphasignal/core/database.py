@@ -25,7 +25,7 @@ class IntelligenceDB:
         
         self._init_db()
 
-    def _get_conn(self):
+    def get_connection(self):
         """Get a fresh PostgreSQL connection."""
         return psycopg2.connect(
             host=self.host,
@@ -34,6 +34,9 @@ class IntelligenceDB:
             password=self.password,
             dbname=self.dbname
         )
+
+    def _get_conn(self):
+        return self.get_connection()
 
     def _init_db(self):
         """Ensure PostgreSQL schema exists."""

@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { Search, RefreshCw, ArrowUp, ArrowDown, PieChart, X } from 'lucide-react';
+import { Search, RefreshCw, ArrowUp, ArrowDown, PieChart, X, Target, Scale, Anchor, AlertTriangle } from 'lucide-react';
 import FundSearch from '@/components/FundSearch';
 
 interface ComponentStock {
@@ -23,6 +23,7 @@ interface FundValuation {
     total_weight: number;
     components: ComponentStock[];
     timestamp: string;
+    source?: string;
 }
 
 interface WatchlistItem {
@@ -30,6 +31,7 @@ interface WatchlistItem {
     name: string;
     estimated_growth?: number; // For sorting by daily performance
     previous_growth?: number; // For trend arrows (↑↓)
+    source?: string; // For confidence indicators
 }
 
 export default function FundDashboard({ params }: { params: Promise<{ locale: string }> }) {
@@ -61,20 +63,73 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
         }
     }, []);
 
+    // Unified batch fetch function
+    const fetchBatchValuation = async (codes: string[]) => {
+        if (codes.length === 0) return;
+
+        try {
+            const codesParam = codes.join(',');
+            const res = await fetch(`/api/funds/batch-valuation?codes=${codesParam}`);
+            const response = await res.json();
+
+            if (response.data) {
+                const fetchTime = new Date();
+
+                // Update Cache
+                setValuationCache(prev => {
+                    const newCache = new Map(prev);
+                    response.data.forEach((val: any) => {
+                        if (val && !val.error && val.fund_code) {
+                            newCache.set(val.fund_code, { data: val, timestamp: fetchTime.getTime() });
+                        }
+                    });
+                    return newCache;
+                });
+
+                // Update Watchlist State
+                setWatchlist(prev => prev.map(item => {
+                    const val = response.data.find((v: any) => v.fund_code === item.code);
+                    if (val && !val.error) {
+                        return {
+                            ...item,
+                            previous_growth: item.estimated_growth,
+                            estimated_growth: val.estimated_growth,
+                            name: (val.fund_name && !item.name) ? val.fund_name : item.name,
+                            source: val.source
+                        };
+                    }
+                    return item;
+                }));
+
+                return response.data;
+            }
+        } catch (err) {
+            console.error('Failed to fetch batch:', err);
+        }
+        return [];
+    };
+
     // 1. Fetch Watchlist from API with Migration Logic
     const fetchWatchlist = async () => {
         try {
             const res = await fetch('/api/watchlist');
             const json = await res.json();
             if (json.data) {
+                let currentWatchlist = json.data;
+
                 // Check if we need to migrate from localStorage
                 if (json.data.length === 0 && typeof window !== 'undefined') {
+                    // ... Migration logic (simplified for brevity in this replacement, assume kept or effectively omitted if not changed? 
+                    // Wait, I strictly replacing `fetchWatchlist` so I must include migration logic if I touch it.
+                    // Actually I will target the `useEffect` removal first, then modify `fetchWatchlist`?
+                    // No, I need to modify `fetchWatchlist` to call batch.
+
+                    // Standard migration logic copy-paste
                     const localStored = localStorage.getItem('fund_watchlist');
                     if (localStored) {
                         try {
                             const parsed = JSON.parse(localStored);
                             if (parsed && parsed.length > 0) {
-                                console.log("Migrating local watchlist to server...", parsed);
                                 for (const item of parsed) {
                                     await fetch('/api/watchlist', {
                                         method: 'POST',
@@ -82,27 +137,35 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
                                         body: JSON.stringify({ code: item.code, name: item.name })
                                     });
                                 }
-                                // Re-fetch
                                 const res2 = await fetch('/api/watchlist');
                                 const json2 = await res2.json();
                                 if (json2.data) {
-                                    setWatchlist(json2.data);
+                                    currentWatchlist = json2.data;
                                     localStorage.removeItem('fund_watchlist');
-                                    // Set initial selection if empty & migrating
-                                    if (json2.data.length > 0 && !localStorage.getItem('fund_selected')) {
-                                        setSelectedFund(json2.data[0].code);
-                                    }
-                                    return;
                                 }
                             }
-                        } catch (e) { console.error("Migration failed", e); }
+                        } catch (e) { }
                     }
                 }
-                setWatchlist(json.data);
+
+                setWatchlist(currentWatchlist);
+
+                // --- OPTIMIZATION: Fetch Batch Valuation IMMEDIATELY ---
+                if (currentWatchlist.length > 0) {
+                    const codes = currentWatchlist.map((i: any) => i.code);
+                    // We await this so cache is populated BEFORE we set selectedFund
+                    // This prevents the single API call in the subsequent useEffect
+                    await fetchBatchValuation(codes);
+                }
 
                 // Set initial selection if empty and no local pref
-                if (json.data.length > 0 && !selectedFund && typeof window !== 'undefined' && !localStorage.getItem('fund_selected')) {
-                    setSelectedFund(json.data[0].code);
+                if (currentWatchlist.length > 0 && !selectedFund && typeof window !== 'undefined') {
+                    const pref = localStorage.getItem('fund_selected');
+                    if (pref && currentWatchlist.some((i: any) => i.code === pref)) {
+                        setSelectedFund(pref);
+                    } else {
+                        setSelectedFund(currentWatchlist[0].code);
+                    }
                 }
             }
         } catch (e) {
@@ -153,7 +216,8 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
                     return {
                         ...item,
                         previous_growth: item.estimated_growth, // Store current as previous
-                        estimated_growth: data.estimated_growth // Update with new value
+                        estimated_growth: data.estimated_growth, // Update with new value
+                        source: data.source
                     };
                 }
                 return item;
@@ -178,73 +242,7 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
         }
     }, [selectedFund]);
 
-    // Preload all watchlist funds' data on mount using batch API
-    useEffect(() => {
-        const preloadWatchlist = async () => {
-            const codesToFetch = watchlist
-                .filter(item => {
-                    // Only fetch if not in cache or expired
-                    const cached = valuationCache.get(item.code);
-                    const now = Date.now();
-                    return !cached || (now - cached.timestamp) >= CACHE_TTL;
-                })
-                .map(item => item.code);
 
-            if (codesToFetch.length === 0) return;
-
-            try {
-                // Fetch in batch
-                const codesParam = codesToFetch.join(',');
-                const res = await fetch(`/api/funds/batch-valuation?codes=${codesParam}`);
-                const response = await res.json();
-
-                if (response.data) {
-                    const now = Date.now();
-                    const fetchTime = new Date();
-
-                    // Update Cache
-                    setValuationCache(prev => {
-                        const newCache = new Map(prev);
-                        response.data.forEach((val: any) => {
-                            if (val && !val.error && val.fund_code) {
-                                newCache.set(val.fund_code, { data: val, timestamp: fetchTime.getTime() });
-                            }
-                        });
-                        return newCache;
-                    });
-
-                    // Update Watchlist State
-                    setWatchlist(prev => prev.map(item => {
-                        const val = response.data.find((v: any) => v.fund_code === item.code);
-                        if (val && !val.error) {
-                            return {
-                                ...item,
-                                previous_growth: item.estimated_growth,
-                                estimated_growth: val.estimated_growth,
-                                name: (val.fund_name && !item.name) ? val.fund_name : item.name
-                            };
-                        }
-                        return item;
-                    }));
-
-                    // Update selected fund if it was part of the batch
-                    if (selectedFund && codesToFetch.includes(selectedFund)) {
-                        const selectedVal = response.data.find((v: any) => v.fund_code === selectedFund);
-                        if (selectedVal && !selectedVal.error) {
-                            setValuation(selectedVal);
-                            setLastUpdated(fetchTime);
-                        }
-                    }
-                }
-            } catch (err) {
-                console.error('Failed to preload batch:', err);
-            }
-        };
-
-        // Delay preload slightly to prioritize main UI
-        const timer = setTimeout(preloadWatchlist, 1000);
-        return () => clearTimeout(timer);
-    }, []); // Check only on mount (or you could depend on watchlist length, but be careful of loop)
 
 
 
@@ -297,7 +295,8 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
                             ...item,
                             previous_growth: item.estimated_growth,
                             estimated_growth: val.estimated_growth,
-                            name: (val.fund_name && !item.name) ? val.fund_name : item.name
+                            name: (val.fund_name && !item.name) ? val.fund_name : item.name,
+                            source: val.source
                         };
                     }
                     return item;
@@ -363,10 +362,10 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
     };
 
     return (
-        <div className="min-h-screen p-4 md:p-6 lg:p-8 font-sans bg-[#020617] text-slate-100">
+        <div className="min-h-screen p-4 md:p-6 lg:p-8 font-sans bg-white text-slate-900">
             <header className="mb-8">
-                <h1 className="text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 flex items-center gap-3">
-                    <span>🔮</span>
+                <h1 className="text-3xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-blue-400 flex items-center gap-3">
+                    <span>💎</span>
                     {t('title')}
                 </h1>
                 <p className="text-slate-500 font-mono text-xs mt-1 uppercase tracking-widest pl-12">
@@ -381,26 +380,26 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
                         title={t('watchlist')}
                         className="overflow-visible"
                         action={
-                            <div className="flex items-center gap-1 bg-slate-800/40 p-0.5 rounded-lg border border-slate-700/50">
+                            <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
                                 <button
                                     onClick={handleWatchlistRefresh}
-                                    className={`p-1 rounded-md transition-all ${isWatchlistRefreshing ? 'text-purple-400 bg-purple-500/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700'}`}
+                                    className={`p-1 rounded-md transition-all ${isWatchlistRefreshing ? 'text-blue-600 bg-blue-50' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200'}`}
                                     title={t('refreshWatchlist')}
                                     disabled={isWatchlistRefreshing}
                                 >
                                     <RefreshCw className={`w-3.5 h-3.5 ${isWatchlistRefreshing ? 'animate-spin' : ''}`} />
                                 </button>
-                                <div className="w-px h-3 bg-slate-700 mx-0.5"></div>
+                                <div className="w-px h-3 bg-slate-200 mx-0.5"></div>
                                 <button
                                     onClick={() => setSortOrder(sortOrder === 'asc' ? 'none' : 'asc')}
-                                    className={`p-1 rounded-md transition-all ${sortOrder === 'asc' ? 'bg-purple-500 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700'}`}
+                                    className={`p-1 rounded-md transition-all ${sortOrder === 'asc' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200'}`}
                                     title="涨幅从低到高"
                                 >
                                     <ArrowUp className="w-3.5 h-3.5" />
                                 </button>
                                 <button
                                     onClick={() => setSortOrder(sortOrder === 'desc' ? 'none' : 'desc')}
-                                    className={`p-1 rounded-md transition-all ${sortOrder === 'desc' ? 'bg-purple-500 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700'}`}
+                                    className={`p-1 rounded-md transition-all ${sortOrder === 'desc' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200'}`}
                                     title="涨幅从高到低"
                                 >
                                     <ArrowDown className="w-3.5 h-3.5" />
@@ -456,8 +455,8 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
                                             key={item.code}
                                             onClick={() => setSelectedFund(item.code)}
                                             className={`group flex items-center justify-between p-3 rounded-md transition-all cursor-pointer ${selectedFund === item.code
-                                                ? 'bg-purple-500/20 border border-purple-500/50 text-purple-200'
-                                                : 'bg-slate-900/50 border border-slate-800 hover:bg-slate-800 text-slate-400'
+                                                ? 'bg-blue-50 border border-blue-200 text-blue-700'
+                                                : 'bg-white border border-transparent hover:bg-slate-50 text-slate-900'
                                                 }`}
                                         >
                                             <div className="flex flex-col overflow-hidden flex-1">
@@ -465,35 +464,54 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
                                                     <span className="font-bold text-sm truncate">{item.name || item.code}</span>
                                                     {item.estimated_growth !== undefined && (
                                                         <div className="flex items-center gap-1 shrink-0">
-                                                            <span className={`font-mono text-xs font-bold ${item.estimated_growth >= 0 ? 'text-rose-400' : 'text-emerald-400'
+                                                            <span className={`font-mono text-xs font-bold ${item.estimated_growth >= 0 ? 'text-rose-600' : 'text-emerald-600'
                                                                 }`}>
                                                                 {item.estimated_growth > 0 ? '+' : ''}{item.estimated_growth.toFixed(2)}%
                                                             </span>
                                                             {/* Trend Arrow */}
                                                             {item.previous_growth !== undefined && item.estimated_growth !== item.previous_growth && (
                                                                 item.estimated_growth > item.previous_growth ? (
-                                                                    <ArrowUp className="w-3 h-3 text-rose-400" />
+                                                                    <ArrowUp className="w-3 h-3 text-rose-600" />
                                                                 ) : (
-                                                                    <ArrowDown className="w-3 h-3 text-emerald-400" />
+                                                                    <ArrowDown className="w-3 h-3 text-emerald-600" />
                                                                 )
                                                             )}
                                                         </div>
                                                     )}
                                                 </div>
-                                                <span className="font-mono text-[10px] opacity-60">{item.code}</span>
+                                                <div className="flex items-center gap-1">
+                                                    <span className="font-mono text-[10px] opacity-60">{item.code}</span>
+                                                    {item.source && (
+                                                        <div className="flex gap-1" title={`Source: ${item.source}`}>
+                                                            {item.source.includes('Calibration') && (
+                                                                <Scale className="w-3 h-3 text-blue-500" />
+                                                            )}
+                                                            {item.source.includes('ETF') && (
+                                                                <Anchor className="w-3 h-3 text-blue-500" />
+                                                            )}
+                                                            {(item.code === '002207' || item.code === '022365') && (
+                                                                <AlertTriangle className="w-3 h-3 text-amber-500" />
+                                                            )}
+                                                            {!item.source.includes('Calibration') && !item.source.includes('ETF') && item.code !== '002207' && item.code !== '022365' && (
+                                                                <Target className="w-3 h-3 text-emerald-500" />
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
 
                                             <div className="flex items-center gap-2 shrink-0 ml-2">
                                                 {selectedFund === item.code && loading && <RefreshCw className="w-3 h-3 animate-spin" />}
                                                 <button
                                                     onClick={(e) => handleDelete(e, item.code)}
-                                                    className="p-1 hover:bg-white/10 rounded-full text-slate-500 hover:text-rose-400 transition-colors"
+                                                    className="p-1 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-900 transition-colors"
                                                 >
                                                     <X className="w-3 h-3" />
                                                 </button>
                                             </div>
                                         </div>
                                     ))}
+
                             </div>
                         </div>
                     </Card>
@@ -505,13 +523,13 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
                         <div className="flex flex-col gap-6">
                             {/* Main KPI Card */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <Card className="md:col-span-2 relative overflow-hidden bg-gradient-to-br from-slate-900 to-slate-900/50">
+                                <Card className="md:col-span-2 relative overflow-hidden bg-white">
                                     <div className="flex flex-col h-full justify-between z-10 relative">
                                         <div className="flex justify-between items-start">
                                             <div>
-                                                <h2 className="text-sm font-mono text-slate-400 uppercase tracking-widest">{t('estimatedGrowth')}</h2>
+                                                <h2 className="text-sm font-mono text-slate-500 uppercase tracking-widest">{t('estimatedGrowth')}</h2>
                                                 <div className="text-5xl font-black mt-2 tracking-tighter flex items-center gap-2">
-                                                    <span className={valuation.estimated_growth >= 0 ? "text-rose-400" : "text-emerald-400"}>
+                                                    <span className={valuation.estimated_growth >= 0 ? "text-rose-600" : "text-emerald-600"}>
                                                         {valuation.estimated_growth > 0 ? "+" : ""}{valuation.estimated_growth.toFixed(2)}%
                                                     </span>
                                                 </div>
@@ -520,7 +538,7 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
                                                 <button
                                                     onClick={handleManualRefresh}
                                                     disabled={loading || refreshing}
-                                                    className="p-2 hover:bg-white/10 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    className="p-2 hover:bg-slate-100 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                     title="Refresh data"
                                                 >
                                                     <RefreshCw className={`w-4 h-4 text-slate-400 transition-transform ${refreshing ? 'animate-spin' : ''}`} />
@@ -534,25 +552,31 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
                                             {t('basedOn', { count: valuation.components.length, weight: valuation.total_weight.toFixed(1) })}
                                             <br />
                                             {t('lastUpdated', { time: lastUpdated ? lastUpdated.toLocaleTimeString() : '' })}
+                                            {/* Source & Calibration Note */}
+                                            {valuation.source && (
+                                                <div className="mt-1 opacity-70">
+                                                    Source: {valuation.source}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
-                                    {/* Background Accents */}
-                                    <div className={`absolute -right-10 -top-10 w-40 h-40 blur-3xl opacity-10 rounded-full ${valuation.estimated_growth >= 0 ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
+                                    {/* Background Accents (Subtle) */}
+                                    <div className={`absolute -right-10 -top-10 w-40 h-40 blur-3xl opacity-5 rounded-full ${valuation.estimated_growth >= 0 ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
                                 </Card>
 
                                 <Card>
-                                    <h2 className="text-sm font-mono text-slate-400 uppercase tracking-widest mb-4">{t('topDrivers')}</h2>
+                                    <h2 className="text-sm font-mono text-slate-500 uppercase tracking-widest mb-4">{t('topDrivers')}</h2>
                                     <div className="flex flex-col gap-2">
                                         {valuation.components
                                             .sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact))
                                             .slice(0, 3)
                                             .map(comp => (
-                                                <div key={comp.code} className="flex justify-between items-center text-xs border-b border-slate-800/50 pb-2 last:border-0 hover:bg-white/5 p-1 rounded">
+                                                <div key={comp.code} className="flex justify-between items-center text-xs border-b border-slate-100 pb-2 last:border-0 hover:bg-slate-50 p-1 rounded">
                                                     <div className="flex gap-2">
                                                         <span className="font-mono text-slate-500">{comp.code}</span>
-                                                        <span className="text-slate-300 truncate max-w-[80px]">{comp.name}</span>
+                                                        <span className="text-slate-700 truncate max-w-[80px] font-medium">{comp.name}</span>
                                                     </div>
-                                                    <span className={`font-mono font-bold ${comp.impact >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                                                    <span className={`font-mono font-bold ${comp.impact >= 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                                                         {comp.impact > 0 ? "+" : ""}{comp.impact.toFixed(3)}%
                                                     </span>
                                                 </div>
@@ -565,37 +589,37 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
                             <Card title={t('attribution')}>
                                 <div className="overflow-x-auto overflow-y-auto max-h-[500px] custom-scrollbar">
                                     <table className="w-full text-left border-collapse text-sm">
-                                        <thead className="sticky top-0 bg-slate-900 z-10">
-                                            <tr className="border-b border-slate-800 text-slate-500 text-[10px] uppercase tracking-wider shadow-sm">
-                                                <th className="p-3 bg-slate-900">{t('tableStock')}</th>
-                                                <th className="p-3 text-right bg-slate-900">{t('tablePrice')}</th>
-                                                <th className="p-3 text-right bg-slate-900">{t('tableChange')}</th>
-                                                <th className="p-3 text-right bg-slate-900">{t('tableWeight')}</th>
-                                                <th className="p-3 text-right bg-slate-900">{t('tableImpact')}</th>
+                                        <thead className="sticky top-0 bg-white z-10">
+                                            <tr className="border-b border-slate-200 text-slate-500 text-[10px] uppercase tracking-wider shadow-sm bg-slate-50/80 backdrop-blur">
+                                                <th className="p-3">{t('tableStock')}</th>
+                                                <th className="p-3 text-right">{t('tablePrice')}</th>
+                                                <th className="p-3 text-right">{t('tableChange')}</th>
+                                                <th className="p-3 text-right">{t('tableWeight')}</th>
+                                                <th className="p-3 text-right">{t('tableImpact')}</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-slate-800/50">
+                                        <tbody className="divide-y divide-slate-100">
                                             {valuation.components
                                                 .slice() // Create a copy to avoid mutating
                                                 .sort((a, b) => b.weight - a.weight) // Sort by weight descending
                                                 .map(comp => (
-                                                    <tr key={comp.code} className="group hover:bg-slate-800/30 transition-colors">
+                                                    <tr key={comp.code} className="group hover:bg-slate-50 transition-colors">
                                                         <td className="p-3">
                                                             <div className="flex flex-col">
-                                                                <span className="font-bold text-slate-200">{comp.name}</span>
+                                                                <span className="font-bold text-slate-800">{comp.name}</span>
                                                                 <span className="text-[10px] font-mono text-slate-500">{comp.code}</span>
                                                             </div>
                                                         </td>
-                                                        <td className="p-3 text-right font-mono text-slate-400">
+                                                        <td className="p-3 text-right font-mono text-slate-600">
                                                             {comp.price.toFixed(2)}
                                                         </td>
-                                                        <td className={`p-3 text-right font-mono font-bold ${comp.change_pct >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                                                        <td className={`p-3 text-right font-mono font-bold ${comp.change_pct >= 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                                                             {comp.change_pct > 0 ? "+" : ""}{comp.change_pct.toFixed(2)}%
                                                         </td>
                                                         <td className="p-3 text-right font-mono text-slate-500">
                                                             {comp.weight.toFixed(2)}%
                                                         </td>
-                                                        <td className={`p-3 text-right font-mono font-bold ${comp.impact >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                                                        <td className={`p-3 text-right font-mono font-bold ${comp.impact >= 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                                                             {comp.impact > 0 ? "+" : ""}{comp.impact.toFixed(3)}%
                                                         </td>
                                                     </tr>
@@ -611,7 +635,7 @@ export default function FundDashboard({ params }: { params: Promise<{ locale: st
                         </div>
                     )}
                 </div>
-            </div>
-        </div>
+            </div >
+        </div >
     );
 }

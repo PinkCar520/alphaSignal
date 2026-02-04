@@ -11,23 +11,7 @@ const config: Config = {
       colors: {
         background: "var(--background)",
         foreground: "var(--foreground)",
-        // 金融语义色
-        bullish: {
-          DEFAULT: "#10b981", // Emerald 500
-          glow: "rgba(16, 185, 129, 0.5)",
-        },
-        bearish: {
-          DEFAULT: "#ef4444", // Red 500
-          glow: "rgba(239, 68, 68, 0.5)",
-        },
-        gold: {
-          DEFAULT: "#eab308", // Yellow 500
-          glow: "rgba(234, 179, 8, 0.5)",
-        },
-        surface: {
-          DEFAULT: "#0f172a", // Slate 900
-          light: "#1e293b",   // Slate 800
-        }
+
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',

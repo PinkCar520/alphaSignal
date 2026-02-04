@@ -8,10 +8,10 @@ interface BadgeProps {
 
 export function Badge({ variant = 'neutral', children, className = '' }: BadgeProps) {
   const variants = {
-    neutral: "bg-slate-800 text-slate-300 border-slate-700",
-    bullish: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.1)]",
-    bearish: "bg-rose-500/10 text-rose-400 border-rose-500/20 shadow-[0_0_10px_rgba(244,63,94,0.1)]",
-    gold: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20 shadow-[0_0_10px_rgba(234,179,8,0.1)]",
+    neutral: "bg-slate-100 text-slate-600 border-slate-200",
+    bullish: "bg-rose-50 text-rose-700 border-rose-200 shadow-sm", // A-share Red for Up
+    bearish: "bg-emerald-50 text-emerald-700 border-emerald-200 shadow-sm", // A-share Green for Down
+    gold: "bg-yellow-50 text-yellow-700 border-yellow-200",
     outline: "bg-transparent",
   };
 

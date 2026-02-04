@@ -219,7 +219,7 @@ export default function FundSearch({ onAddFund, existingCodes, placeholder = '�
                     onFocus={() => setIsOpen(true)}
                     onKeyDown={handleKeyDown}
                     placeholder={placeholder}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-md py-2 pl-9 pr-8 text-sm focus:border-purple-500 outline-none transition-colors"
+                    className="w-full bg-white border border-slate-200 rounded-md py-2 pl-9 pr-8 text-sm focus:border-blue-600 outline-none transition-colors text-slate-900 placeholder-slate-400"
                 />
                 {query && (
                     <button
@@ -227,7 +227,7 @@ export default function FundSearch({ onAddFund, existingCodes, placeholder = '�
                             setQuery('');
                             inputRef.current?.focus();
                         }}
-                        className="absolute right-2 top-2.5 text-slate-500 hover:text-slate-300"
+                        className="absolute right-2 top-2.5 text-slate-400 hover:text-slate-600"
                     >
                         <X className="w-4 h-4" />
                     </button>
@@ -236,11 +236,11 @@ export default function FundSearch({ onAddFund, existingCodes, placeholder = '�
 
             {/* Dropdown */}
             {isOpen && (
-                <div className="absolute z-50 w-full mt-2 bg-slate-900 border border-slate-800 rounded-md shadow-2xl max-h-80 overflow-y-auto">
+                <div className="absolute z-50 w-full mt-2 bg-white border border-slate-200 rounded-md shadow-2xl max-h-80 overflow-y-auto">
                     {/* Loading State */}
                     {isLoading && query && (
                         <div className="p-4 text-center">
-                            <div className="animate-spin w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full mx-auto mb-2"></div>
+                            <div className="animate-spin w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-2"></div>
                             <p className="text-sm text-slate-500">搜索中...</p>
                         </div>
                     )}
@@ -249,7 +249,7 @@ export default function FundSearch({ onAddFund, existingCodes, placeholder = '�
                     {!isLoading && displayItems.length > 0 && (
                         <>
                             {/* Header */}
-                            <div className="px-3 py-2 border-b border-slate-800">
+                            <div className="px-3 py-2 border-b border-slate-100">
                                 <div className="flex items-center gap-2 text-xs text-slate-500 uppercase tracking-wider">
                                     {query ? (
                                         <>
@@ -288,21 +288,21 @@ export default function FundSearch({ onAddFund, existingCodes, placeholder = '�
                                             onMouseEnter={() => setActiveIndex(index)}
                                             disabled={isAdded}
                                             className={`w-full px-3 py-2 text-left transition-colors ${isActive
-                                                ? 'bg-purple-500/20 border-l-2 border-purple-500'
-                                                : 'hover:bg-slate-800/50 border-l-2 border-transparent'
+                                                ? 'bg-blue-50 border-l-2 border-blue-600'
+                                                : 'hover:bg-slate-50 border-l-2 border-transparent'
                                                 } ${isAdded ? 'opacity-50 cursor-not-allowed' : ''}`}
                                         >
                                             <div className="flex items-start justify-between gap-2">
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center gap-2">
-                                                        <span className="font-bold text-sm text-slate-200 truncate">
+                                                        <span className="font-bold text-sm text-slate-800 truncate">
                                                             {fund.name}
                                                         </span>
                                                         {isHistory && (
                                                             <Clock className="w-3 h-3 text-slate-500 shrink-0" />
                                                         )}
                                                         {isAdded && (
-                                                            <span className="text-[10px] px-1.5 py-0.5 bg-slate-700 text-slate-400 rounded-full font-mono">
+                                                            <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-400 rounded-full font-mono border border-slate-200">
                                                                 已添加
                                                             </span>
                                                         )}
@@ -330,7 +330,7 @@ export default function FundSearch({ onAddFund, existingCodes, placeholder = '�
                                                     </div>
                                                 </div>
                                                 {!isAdded && (
-                                                    <Plus className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+                                                    <Plus className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
                                                 )}
                                             </div>
                                         </button>
@@ -339,14 +339,14 @@ export default function FundSearch({ onAddFund, existingCodes, placeholder = '�
                             </div>
 
                             {/* Footer Hint */}
-                            <div className="px-3 py-2 border-t border-slate-800 bg-slate-950">
-                                <p className="text-xs text-slate-600">
-                                    <kbd className="px-1.5 py-0.5 bg-slate-800 rounded text-[10px]">↑</kbd>
-                                    <kbd className="px-1.5 py-0.5 bg-slate-800 rounded text-[10px] ml-1">↓</kbd>
+                            <div className="px-3 py-2 border-t border-slate-100 bg-slate-50">
+                                <p className="text-xs text-slate-500">
+                                    <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px] text-slate-400">↑</kbd>
+                                    <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px] ml-1 text-slate-400">↓</kbd>
                                     {' '}导航 {' '}
-                                    <kbd className="px-1.5 py-0.5 bg-slate-800 rounded text-[10px]">Enter</kbd>
+                                    <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px] text-slate-400">Enter</kbd>
                                     {' '}选择 {' '}
-                                    <kbd className="px-1.5 py-0.5 bg-slate-800 rounded text-[10px]">Esc</kbd>
+                                    <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px] text-slate-400">Esc</kbd>
                                     {' '}关闭
                                 </p>
                             </div>
@@ -364,7 +364,7 @@ export default function FundSearch({ onAddFund, existingCodes, placeholder = '�
                                     setQuery('');
                                     setIsOpen(false);
                                 }}
-                                className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
+                                className="text-xs text-blue-600 hover:text-blue-700 transition-colors"
                             >
                                 直接添加代码 "{query}"
                             </button>
